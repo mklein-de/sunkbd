@@ -3,7 +3,8 @@ OBJCOPY = avr-objcopy
 
 MCU     = atmega8
 FREQ	= 12000000
-CFLAGS  = -I. -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ)
+CFLAGS  = -I. -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ) -MMD
+ASFLAGS = $(CFLAGS)
 
 TARGET  = sunkbd
 SRC_C   = lcd.c usbdrv/oddebug.c usbdrv/usbdrv.c sunkbd.c
@@ -28,12 +29,5 @@ fuses:
 
 clean:
 	rm -f $(OBJECTS) $(DEPS) *.map *.elf *.hex *.s *.i
-
-.SUFFIXES: .o .c .S
-.c.o:
-	$(CC) $(CFLAGS) -MMD -o $@ -c $<
-
-.S.o:
-	$(CC) $(CFLAGS) -o $@ -c $<
 
 -include $(DEPS)
