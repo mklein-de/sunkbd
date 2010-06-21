@@ -43,9 +43,11 @@ static struct
 reportBuffer;
 
 
+static uchar LEDState;
 static uchar idleRate;           /* in 4 ms units */
 static uchar expectReport;
 static volatile uchar updateNeeded;
+static enum { KEYCLICK_OFF, KEYCLICK_ON, KEYCLICK_CAPS } keyClickMode;
 
 static uchar suspended;
 
@@ -104,16 +106,14 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
     0x2a, 0x81, 0x00,              //   USAGE_MAXIMUM (Keyboard Application)
     0x81, 0x00,                    //   INPUT (Data,Ary,Abs)
 
-
-    0xc0,                          // END_COLLECTION  
-#if 0
     0x95, 0x01,                    //   REPORT_COUNT (1)
-    0x75, 0x02,                    //   REPORT_SIZE (2)
+    0x75, 0x03,                    //   REPORT_SIZE (3)
     0xb1, 0x02,                    //   FEATURE (Data,Var,Abs)
     0x95, 0x01,                    //   REPORT_COUNT (1)
-    0x75, 0x06,                    //   REPORT_SIZE (6)
+    0x75, 0x06,                    //   REPORT_SIZE (5)
     0xb1, 0x03,                    //   FEATURE (Cnst,Var,Abs)
-#endif
+
+    0xc0,                          // END_COLLECTION  
 };
 
 
@@ -133,16 +133,8 @@ uchar usbFunctionSetup(uchar data[8])
                 return sizeof(reportBuffer);
 
             case USBRQ_HID_SET_REPORT:
-                lcd_set_cursor(0, 0);
-                lcd_string("0x");
-                lcd_hexbyte(rq->bRequest);
-                if (rq->wLength.word == 1)
-                {
-                    /* We expect one byte reports */
-                    expectReport=1;
-                    return 0xff; /* Call usbFunctionWrite with data */
-                }
-                break;
+                expectReport = rq->wValue.bytes[1];
+                return 0xff; /* Call usbFunctionWrite with data */
 
             case USBRQ_HID_GET_IDLE:
                 usbMsgPtr = &idleRate;
@@ -167,38 +159,69 @@ uchar usbFunctionSetup(uchar data[8])
 }
 
 
+static void updateLEDs()
+{
+    loop_until_bit_is_set(UCSRA, UDRE);
+    UDR = KBD_LED;
+
+    loop_until_bit_is_set(UCSRA, UDRE);
+    UDR = LEDState;
+}
+
+static void updateKeyClick()
+{
+    uchar c;
+    switch(keyClickMode)
+    {
+        case KEYCLICK_ON:
+            c = KBD_CLICK_ON;
+            break;
+        case KEYCLICK_CAPS:
+            c = (LEDState & 0x08) ? KBD_CLICK_ON : KBD_CLICK_OFF;
+            break;
+        default:
+            c = KBD_CLICK_OFF;
+            break;
+    }
+
+    loop_until_bit_is_set(UCSRA, UDRE);
+    UDR = c;
+}
+
+
 uchar usbFunctionWrite(uchar *data, uchar len)
 {
-    if (expectReport && len==1)
+    /* 
+     * HID bits: { NUM LOCK=0, CAPS LOCK=1, SCROLL LOCK=2, COMPOSE=3 }
+     * kbd bits: { NUM LOCK=0, COMPOSE=1, SCROLL LOCK=2, CAPS LOCK=3 }
+     */
+    static uchar HIDModifiers2KeyboardLEDs[] =
     {
-        uchar ledmask = 0;
+        0x00, 0x01, 0x08, 0x09,
+        0x04, 0x05, 0x0c, 0x0d,
+        0x02, 0x03, 0x0a, 0x0b,
+        0x06, 0x07, 0x0e, 0x0f,
+    };
 
-        if (data[0] & _BV(1))
+    if (len == 1)
+    {
+        switch(expectReport)
         {
-            while(!(UCSRA & _BV(UDRE)));
-            UDR = KBD_CLICK_ON;
-            ledmask |= _BV(3);
-        }
-        else
-        {
-            while(!(UCSRA & _BV(UDRE)));
-            UDR = KBD_CLICK_OFF;
-        }
+            case 2:
+                /* Output Report */
+                LEDState = HIDModifiers2KeyboardLEDs[*data & 0x0f];
+                updateLEDs();
+                if(keyClickMode == KEYCLICK_CAPS)
+                    updateKeyClick();
+                break;
 
-        while(!(UCSRA & _BV(UDRE)));
-        UDR = KBD_LED;
-
-        while(!(UCSRA & _BV(UDRE)));
-        UDR = ledmask;
-
-#if 0
-        LEDstate=data[0]; /* Get the state of all 5 LEDs */
-        if (LEDstate&LED_CAPS) { /* Check state of CAPS lock LED */
-            PORTD|=0x02;
-        } else {
-            PORTD&=~0x02;
+            case 3:
+                /* Feature Report */
+                lcd_set_cursor(0, 0);
+                lcd_string("0x");
+                lcd_hexbyte(*data);
+                break;
         }
-#endif
     }
     expectReport=0;
     return 1;
@@ -399,7 +422,11 @@ ISR(USART_RXC_vect)
 
     if (skipCount)
     {
-        skipCount--;
+        if(--skipCount == 0)
+        {
+            updateLEDs();
+            updateKeyClick();
+        }
         return;
     }
 
@@ -422,18 +449,6 @@ ISR(USART_RXC_vect)
             hid_code = pgm_read_byte(keycode2hidcode + (k&0x7f));
             if (hid_code)
             {
-#if 0
-                lcd_clear();
-
-                lcd_set_cursor(0, 0);
-                lcd_string("0x");
-                lcd_hexbyte(k);
-
-                lcd_set_cursor(0, 1);
-                lcd_string("0x");
-                lcd_hexbyte(hid_code);
-#endif
-
                 if (k & _BV(7))
                 {
                     /* break */
@@ -471,15 +486,6 @@ ISR(USART_RXC_vect)
                     else
                         reportBuffer.modifierMask |= _BV(hid_code - HID_LeftControl);
                 }
-#if 0
-                lcd_set_cursor(0, 1);
-                for (i = 0; i < REPORT_SIZE; i++)
-                {
-                    lcd_char(reportBuffer[i] ? '*' : '-');
-                }
-
-                updateNeeded = 1;
-#endif
             }
     }
 }
