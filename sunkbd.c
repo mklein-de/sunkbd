@@ -1,3 +1,4 @@
+#include <avr/eeprom.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>       /* PROGMEM */
 #include <avr/wdt.h>
@@ -58,7 +59,7 @@ static void hardwareInit(void)
     DDRD  = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
 
     /* USB Reset by device only required on Watchdog Reset */
-    _delay_us(11);   /* delay >10ms for USB reset */ 
+    _delay_ms(11);   /* delay >10ms for USB reset */ 
 
     DDRD  = 0x00;
     /* configure timer 0 for a rate of 12M/(1024 * 256) = 45.78 Hz (~22ms) */
@@ -122,15 +123,22 @@ uchar usbFunctionSetup(uchar data[8])
     static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol */
 
     usbRequest_t *rq = (void *)data;
-    usbMsgPtr = (uchar*)&reportBuffer;
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS)
     {
         switch(rq->bRequest)
         {
             case USBRQ_HID_GET_REPORT:
-                /* wValue: ReportType (highbyte), ReportID (lowbyte) */
-                /* we only have one report type, so don't look at wValue */
-                return sizeof(reportBuffer);
+                if(rq->wValue.bytes[1] == 3)
+                {
+                    /* Feature Report */
+                    usbMsgPtr = (uchar*)&keyClickMode;
+                    return 1;
+                }
+                else
+                {
+                    usbMsgPtr = (uchar*)&reportBuffer;
+                    return sizeof(reportBuffer);
+                }
 
             case USBRQ_HID_SET_REPORT:
                 expectReport = rq->wValue.bytes[1];
@@ -180,12 +188,32 @@ static void updateKeyClick()
             c = (LEDState & 0x08) ? KBD_CLICK_ON : KBD_CLICK_OFF;
             break;
         default:
+            keyClickMode = KEYCLICK_OFF;
+        case KEYCLICK_OFF:
             c = KBD_CLICK_OFF;
             break;
     }
 
     loop_until_bit_is_set(UCSRA, UDRE);
     UDR = c;
+}
+
+void readEEPROM()
+{
+    char buffer[7];
+    eeprom_read_block(&buffer, 0, sizeof(buffer));
+    if (!strncmp(buffer, "SuNkBd", 6))
+        keyClickMode = buffer[6];
+    else
+        keyClickMode = KEYCLICK_OFF;
+}
+
+void writeEEPROM()
+{
+    char buffer[7];
+    strcpy(buffer, "SuNkBd");
+    buffer[6] = keyClickMode;
+    eeprom_write_block(&buffer, 0, sizeof(buffer));
 }
 
 
@@ -217,10 +245,16 @@ uchar usbFunctionWrite(uchar *data, uchar len)
 
             case 3:
                 /* Feature Report */
-                lcd_set_cursor(0, 0);
-                lcd_string("0x");
-                lcd_hexbyte(*data);
-                break;
+                if (*data & 0x08)
+                    /* read from EEPROM */
+                    readEEPROM();
+                else
+                    keyClickMode = *data & 0x03;
+
+                updateKeyClick();
+                if (*data & 0x04)
+                    /* write to EEPROM */
+                    writeEEPROM();
         }
     }
     expectReport=0;
@@ -416,17 +450,13 @@ ISR(USART_RXC_vect)
     uchar i;
     uchar hid_code;
 
-    static uchar skipCount;
+    static uchar expectResetResponse, expectLayoutResponse;
 
     k = UDR;
 
-    if (skipCount)
+    if (expectLayoutResponse)
     {
-        if(--skipCount == 0)
-        {
-            updateLEDs();
-            updateKeyClick();
-        }
+        expectLayoutResponse = 0;
         return;
     }
 
@@ -442,11 +472,25 @@ ISR(USART_RXC_vect)
     switch(k)
     {
         case KBD_RESET_RESPONSE:
+            expectResetResponse = 1;
+            break;
         case KBD_LAYOUT_RESPONSE:
-            skipCount = 1;
+            expectLayoutResponse = 1;
             break;
         default:
-            hid_code = pgm_read_byte(keycode2hidcode + (k&0x7f));
+            if (expectResetResponse)
+            {
+                expectResetResponse = 0;
+                if (k == 4)
+                    return; /* no error */
+
+                hid_code = HID_POSTFail;
+            }
+            else
+            {
+                hid_code = pgm_read_byte(keycode2hidcode + (k&0x7f));
+            }
+
             if (hid_code)
             {
                 if (k & _BV(7))
@@ -482,6 +526,10 @@ ISR(USART_RXC_vect)
 
                         if (i < KEY_COUNT)
                             *p = hid_code;
+                        else
+                            for (i = 0, p = reportBuffer.keys; i < KEY_COUNT; i++, p++)
+                                *p = HID_ErrorRollOver;
+
                     }
                     else
                         reportBuffer.modifierMask |= _BV(hid_code - HID_LeftControl);
@@ -500,12 +548,18 @@ int main(void)
     hardwareInit(); /* Initialize hardware (I/O) */
 
     odDebugInit();
+
     memset(&reportBuffer,0,sizeof(reportBuffer)); /* Clear report buffer */
 
     usbInit(); /* Initialize USB stack processing */
 
     uart_init();
     lcd_init();
+
+    readEEPROM();
+
+    updateLEDs();
+    updateKeyClick();
 
     sei(); /* Enable global interrupts */
 
