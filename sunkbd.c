@@ -198,17 +198,18 @@ static void updateKeyClick()
     UDR = c;
 }
 
-void readEEPROM()
+static void readEEPROM()
 {
     char buffer[7];
     eeprom_read_block(&buffer, 0, sizeof(buffer));
     if (!strncmp(buffer, "SuNkBd", 6))
         keyClickMode = buffer[6];
     else
-        keyClickMode = KEYCLICK_OFF;
+        keyClickMode = KEYCLICK_CAPS;
+
 }
 
-void writeEEPROM()
+static void writeEEPROM()
 {
     char buffer[7];
     strcpy(buffer, "SuNkBd");
