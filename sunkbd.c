@@ -460,6 +460,9 @@ ISR(USART_RXC_vect)
         return;
     }
 
+    lcd_set_cursor(0, 0);
+    lcd_hexbyte(k);
+
     if (suspended)
     {
         PORTD &= ~(_BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT));
@@ -525,7 +528,11 @@ ISR(USART_RXC_vect)
                             ;
 
                         if (i < KEY_COUNT)
+                        {
                             *p = hid_code;
+                            lcd_set_cursor(0, 1);
+                            lcd_hexbyte(hid_code);
+                        }
                         else
                             for (i = 0, p = reportBuffer.keys; i < KEY_COUNT; i++, p++)
                                 *p = HID_ErrorRollOver;
@@ -534,6 +541,7 @@ ISR(USART_RXC_vect)
                     else
                         reportBuffer.modifierMask |= _BV(hid_code - HID_LeftControl);
                 }
+                updateNeeded = 1;
             }
     }
 }
@@ -585,8 +593,11 @@ int main(void)
 
         /* If an update is needed, send the report */
         if(updateNeeded && usbInterruptIsReady()){
+            static uchar c;
             updateNeeded = 0;
             usbSetInterrupt((uchar*)&reportBuffer, sizeof(reportBuffer));
+            lcd_set_cursor(6,0);
+            lcd_hexbyte(c++);
         }
     }
     return 0;
