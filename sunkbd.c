@@ -35,11 +35,17 @@ enum KEYBOARD_RESPONSE
 
 #define KEY_COUNT 6
 
-static struct
+static union
 {
-    uchar modifierMask;
-    uchar reserved;
-    uchar keys[KEY_COUNT];
+    struct report_s
+    {
+        uchar modifierMask;
+        uchar reserved;
+        uchar keys[KEY_COUNT];
+    }
+    report;
+
+    uchar bytes[sizeof(struct report_s)];
 }
 reportBuffer;
 
@@ -50,6 +56,8 @@ static uchar expectReport;
 static volatile uchar updateNeeded;
 static enum { KEYCLICK_OFF, KEYCLICK_ON, KEYCLICK_CAPS } keyClickMode;
 
+static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol */
+
 static uchar suspended;
 
 static void hardwareInit(void)
@@ -57,6 +65,9 @@ static void hardwareInit(void)
     /* activate pull-ups except on USB lines */
     PORTD = ~(_BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT));
     DDRD  = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
+
+    DDRB = _BV(PB0);
+    PORTB = protocolVer;
 
     /* USB Reset by device only required on Watchdog Reset */
     _delay_ms(11);   /* delay >10ms for USB reset */ 
@@ -117,11 +128,18 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
     0xc0,                          // END_COLLECTION  
 };
 
+static void updateLEDs()
+{
+    loop_until_bit_is_set(UCSRA, UDRE);
+    UDR = KBD_LED;
+
+    loop_until_bit_is_set(UCSRA, UDRE);
+    UDR = LEDState;
+}
+
 
 uchar usbFunctionSetup(uchar data[8])
 {
-    static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol */
-
     usbRequest_t *rq = (void *)data;
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS)
     {
@@ -136,7 +154,7 @@ uchar usbFunctionSetup(uchar data[8])
                 }
                 else
                 {
-                    usbMsgPtr = (uchar*)&reportBuffer;
+                    usbMsgPtr = reportBuffer.bytes;
                     return sizeof(reportBuffer);
                 }
 
@@ -157,8 +175,8 @@ uchar usbFunctionSetup(uchar data[8])
                 return 1;
 
             case USBRQ_HID_SET_PROTOCOL:
-                if (rq->wValue.bytes[1] < 2)
-                    protocolVer = rq->wValue.bytes[1];
+                protocolVer = rq->wValue.bytes[0] & 1;
+                PORTB = protocolVer;
                 break;
 
         }
@@ -166,15 +184,6 @@ uchar usbFunctionSetup(uchar data[8])
     return 0;
 }
 
-
-static void updateLEDs()
-{
-    loop_until_bit_is_set(UCSRA, UDRE);
-    UDR = KBD_LED;
-
-    loop_until_bit_is_set(UCSRA, UDRE);
-    UDR = LEDState;
-}
 
 static void updateKeyClick()
 {
@@ -313,7 +322,7 @@ enum HIDCodes
 
 const uchar keycode2hidcode[128] PROGMEM =
 {
-            HID_Reserved,
+            HID_POSTFail, /* no actual key */
 /* 0x01	*/  HID_Stop,
             HID_VolumeDown,
 /* 0x03	*/  HID_Again,
@@ -443,26 +452,31 @@ const uchar keycode2hidcode[128] PROGMEM =
             HID_Reserved
 };
 
+static uchar pressedKeys[(sizeof(keycode2hidcode)+7)>>3];
+
 
 ISR(USART_RXC_vect)
 {
     uchar k;
     uchar * p;
-    uchar i;
+    uchar i, j;
     uchar hid_code;
 
     static uchar expectResetResponse, expectLayoutResponse;
+/*    static uchar c;*/
 
     k = UDR;
+
+/*    if (!(c % 8))*/
+/*        lcd_clear();*/
+/*    lcd_set_cursor((c % 4)  * 2, c / 4);*/
+/*    lcd_hexbyte(k);*/
 
     if (expectLayoutResponse)
     {
         expectLayoutResponse = 0;
         return;
     }
-
-    lcd_set_cursor(0, 0);
-    lcd_hexbyte(k);
 
     if (suspended)
     {
@@ -488,68 +502,59 @@ ISR(USART_RXC_vect)
                 if (k == 4)
                     return; /* no error */
 
-                hid_code = HID_POSTFail;
+                k = 0; /* -> HID_POSTFail */
+            }
+
+            if (k & _BV(7))
+            {
+                /* break */
+                k &= ~_BV(7);
+                pressedKeys[k>>3] &= ~_BV(k & 0x07);
             }
             else
             {
-                hid_code = pgm_read_byte(keycode2hidcode + (k&0x7f));
+                /* make */
+                pressedKeys[k>>3] |= _BV(k & 0x07);
             }
 
-            if (hid_code)
+            for (i = 0; i < sizeof(reportBuffer.bytes); i++)
             {
-                if (k & _BV(7))
-                {
-                    /* break */
-                    if (hid_code < HID_LeftControl)
-                    {
-                        p = reportBuffer.keys;
-                        for (i = 0; i < KEY_COUNT && *p && *p != hid_code; i++, p++)
-                            ;
+                reportBuffer.bytes[i] = 0;
+            }
 
-                        if (i < KEY_COUNT)
-                        {
-                            while(++i < KEY_COUNT)
-                            {
-                                p[0] = p[1];
-                                p++;
-                            }
-                            *p = 0;
-                        }
-                    }
-                    else
-                        reportBuffer.modifierMask &= ~_BV(hid_code - HID_LeftControl);
-                }
-                else
+            for (i = 0, j = 0; i < sizeof(keycode2hidcode); i++)
+            {
+                if (pressedKeys[i>>3] & _BV(i & 0x07))
                 {
-                    /* make */
-                    if (hid_code < HID_LeftControl)
+                    hid_code = pgm_read_byte(keycode2hidcode + i);
+                    if (hid_code)
                     {
-                        p = reportBuffer.keys;
-                        for (i = 0; i < KEY_COUNT && *p; i++, p++)
-                            ;
-
-                        if (i < KEY_COUNT)
+                        if (hid_code < HID_LeftControl)
                         {
-                            *p = hid_code;
-                            lcd_set_cursor(0, 1);
-                            lcd_hexbyte(hid_code);
+                            /* non-modifier key */
+                            if (j < KEY_COUNT)
+                                reportBuffer.report.keys[j++] = hid_code;
+                            else
+                                for (j = 0; j < KEY_COUNT; j++)
+                                    reportBuffer.report.keys[j] = HID_ErrorRollOver;
                         }
                         else
-                            for (i = 0, p = reportBuffer.keys; i < KEY_COUNT; i++, p++)
-                                *p = HID_ErrorRollOver;
-
+                        {
+                            /* modifier */
+                            reportBuffer.report.modifierMask |= _BV(hid_code - HID_LeftControl);
+                        }
                     }
-                    else
-                        reportBuffer.modifierMask |= _BV(hid_code - HID_LeftControl);
                 }
-                updateNeeded = 1;
             }
+
+            updateNeeded = 1;
     }
 }
 
 
 int main(void)
 {
+    uchar i;
     uchar idleCounter = 0;
     uchar prevSofCount = 0;
 
@@ -594,11 +599,13 @@ int main(void)
 
         /* If an update is needed, send the report */
         if(updateNeeded && usbInterruptIsReady()){
-            static uchar c;
             updateNeeded = 0;
-            usbSetInterrupt((uchar*)&reportBuffer, sizeof(reportBuffer));
-            lcd_set_cursor(6,0);
-            lcd_hexbyte(c++);
+            usbSetInterrupt(reportBuffer.bytes, sizeof(reportBuffer));
+            for (i = 0; i < sizeof(reportBuffer); i++)
+            {
+                lcd_set_cursor((i % 4)  * 2, i / 4);
+                lcd_hexbyte(reportBuffer.bytes[i]);
+            }
         }
     }
     return 0;
