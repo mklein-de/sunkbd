@@ -62,9 +62,8 @@ static uchar suspended;
 
 static void hardwareInit(void)
 {
-    /* activate pull-ups except on USB lines */
-    PORTD = ~(_BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT));
-    DDRD  = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
+    PORTD |= _BV(PD0); /* enable RX pullup */
+    DDRD   = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
 
     DDRB = _BV(PB0);
     PORTB = protocolVer;
@@ -275,8 +274,6 @@ uchar usbFunctionWrite(uchar *data, uchar len)
 void uart_init()
 {
     unsigned int ubrr;
-
-    PORTD |= _BV(PD0); /* enable RX pullup */
 
     ubrr = ((F_CPU + (BAUDRATE<<2)) / (BAUDRATE<<4)) - 1;
 
