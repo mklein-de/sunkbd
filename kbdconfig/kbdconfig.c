@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "usbconfig.h"
+#include "../firmware/usbconfig.h"
 
 #define HID_GET_REPORT 0x01
 #define HID_SET_REPORT 0x09
