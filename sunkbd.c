@@ -457,9 +457,7 @@ static uchar pressedKeys[(sizeof(keycode2hidcode)+7)>>3];
 
 ISR(USART_RXC_vect)
 {
-    uchar k;
-    uchar * p;
-    uchar i, j;
+    uchar i, j, k, idx, mask;
     uchar hid_code;
 
     static uchar expectResetResponse, expectLayoutResponse;
@@ -505,22 +503,18 @@ ISR(USART_RXC_vect)
                 k = 0; /* -> HID_POSTFail */
             }
 
+            idx = (k & ~_BV(7)) >> 3;
+            mask = _BV(k & 0x07);
+
             if (k & _BV(7))
-            {
                 /* break */
-                k &= ~_BV(7);
-                pressedKeys[k>>3] &= ~_BV(k & 0x07);
-            }
+                pressedKeys[idx] &= ~mask;
             else
-            {
                 /* make */
-                pressedKeys[k>>3] |= _BV(k & 0x07);
-            }
+                pressedKeys[idx] |= mask;
 
             for (i = 0; i < sizeof(reportBuffer.bytes); i++)
-            {
                 reportBuffer.bytes[i] = 0;
-            }
 
             for (i = 0, j = 0; i < sizeof(keycode2hidcode); i++)
             {
@@ -562,8 +556,6 @@ int main(void)
     hardwareInit(); /* Initialize hardware (I/O) */
 
     odDebugInit();
-
-    memset(&reportBuffer,0,sizeof(reportBuffer)); /* Clear report buffer */
 
     usbInit(); /* Initialize USB stack processing */
 
