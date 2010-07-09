@@ -21,6 +21,9 @@ $(TARGET).hex: $(TARGET).elf
 $(TARGET).elf: $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ -Wl,-Map,$(TARGET).map $(OBJECTS) -lm
 
+bootload: $(TARGET).hex
+	../bootloader/commandline/bootloadHID $(TARGET).hex
+
 flash: $(TARGET).hex
 	avrdude -p $(MCU) -U flash:w:$(TARGET).hex
 

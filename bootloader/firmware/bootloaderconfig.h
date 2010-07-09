@@ -108,11 +108,11 @@ these macros are defined, the boot loader usees them.
 
 static inline void  bootLoaderInit(void)
 {
-    PORTB = 1 << 1; /* activate pull-up for key */
+    PORTB = 1 << 0; /* activate pull-up for key */
     _delay_us(10);  /* wait for levels to stabilize */
 }
 
-#define bootLoaderCondition()   ((PINB & (1 << 1)) == 0)   /* True if jumper is set */
+#define bootLoaderCondition()   ((PINB & (1 << 0)) == 0)   /* True if jumper is set */
 
 #endif
 

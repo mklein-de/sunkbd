@@ -60,13 +60,23 @@ static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol
 
 static uchar suspended;
 
+static void led(uchar onoff)
+{
+    if (onoff)
+        PORTB &= ~_BV(PB1);
+    else
+        PORTB |= _BV(PB1);
+}
+
 static void hardwareInit(void)
 {
     PORTD |= _BV(PD0); /* enable RX pullup */
     DDRD   = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
 
-    DDRB = _BV(PB0);
-    PORTB = protocolVer;
+    DDRB  = _BV(PB1);
+    PORTB = _BV(PB0); /* enable bootload jumper pullup */
+
+    led(protocolVer == 0);
 
     /* USB Reset by device only required on Watchdog Reset */
     _delay_ms(11);   /* delay >10ms for USB reset */ 
@@ -175,7 +185,7 @@ uchar usbFunctionSetup(uchar data[8])
 
             case USBRQ_HID_SET_PROTOCOL:
                 protocolVer = rq->wValue.bytes[0] & 1;
-                PORTB = protocolVer;
+                led(protocolVer == 0);
                 break;
 
         }
@@ -569,6 +579,9 @@ int main(void)
     for(;;){  /* Main loop */
         wdt_reset(); /* Reset the watchdog */
         usbPoll(); /* Poll the USB stack */
+
+        if (bit_is_clear(PINB, PB0))
+            while(1);
 
         /* Check timer if we need periodic reports */
         if(TIFR & (1<<TOV0)){
