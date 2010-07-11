@@ -14,6 +14,9 @@
 
 #define BAUDRATE 1200L
 
+#define DEBUG_LED_BIT   PD7
+#define DEBUG_LED_PORT  PORTD
+
 enum KEYBOARD_COMMAND
 {
     KBD_RESET     = 0x01,
@@ -63,17 +66,17 @@ static uchar suspended;
 static void led(uchar onoff)
 {
     if (onoff)
-        PORTB &= ~_BV(PB1);
+        DEBUG_LED_PORT |= _BV(DEBUG_LED_BIT);
     else
-        PORTB |= _BV(PB1);
+        DEBUG_LED_PORT &= ~_BV(DEBUG_LED_BIT);
 }
 
 static void hardwareInit(void)
 {
     PORTD |= _BV(PD0); /* enable RX pullup */
-    DDRD   = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT);
+    DDRD   = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT) |
+        _BV(DEBUG_LED_BIT);
 
-    DDRB  = _BV(PB1);
     PORTB = _BV(PB0); /* enable bootload jumper pullup */
 
     led(protocolVer == 0);
@@ -81,7 +84,7 @@ static void hardwareInit(void)
     /* USB Reset by device only required on Watchdog Reset */
     _delay_ms(11);   /* delay >10ms for USB reset */ 
 
-    DDRD  = 0x00;
+    DDRD &= ~(_BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT));
     /* configure timer 0 for a rate of 12M/(1024 * 256) = 45.78 Hz (~22ms) */
     TCCR0 = 5;      /* timer 0 prescaler: 1024 */
 }
