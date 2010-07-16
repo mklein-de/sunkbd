@@ -606,11 +606,13 @@ int main(void)
         if(updateNeeded && usbInterruptIsReady()){
             updateNeeded = 0;
             usbSetInterrupt(reportBuffer.bytes, sizeof(reportBuffer));
+#if 0
             for (i = 0; i < sizeof(reportBuffer); i++)
             {
                 lcd_set_cursor((i % 4)  * 2, i / 4);
                 lcd_hexbyte(reportBuffer.bytes[i]);
             }
+#endif
         }
     }
     return 0;
