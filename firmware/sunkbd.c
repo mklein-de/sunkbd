@@ -374,7 +374,7 @@ const uchar keycode2hidcode[128] PROGMEM =
 /* 0x27	*/  HID_0,
 /* 0x28	*/  HID_Minus,
 /* 0x29	*/  HID_Equal,
-/* 0x2A	*/  HID_INTL_Backslash,
+/* 0x2A	*/  HID_AccentGrave,
 /* 0x2B	*/  HID_Backspace,
             HID_Insert,
 /* 0x2D	*/  HID_Mute,
@@ -456,7 +456,7 @@ const uchar keycode2hidcode[128] PROGMEM =
 /* 0x79	*/  HID_Space,
 /* 0x7A	*/  HID_RightGUI,
             HID_PageDown,
-            HID_AccentGrave,
+            HID_INTL_Backslash,
 /* 0x7D	*/  HID_KP_Add,
             HID_Reserved,
             HID_Reserved
