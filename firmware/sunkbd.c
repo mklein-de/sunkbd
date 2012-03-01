@@ -558,7 +558,9 @@ ISR(USART_RXC_vect)
 
 int main(void)
 {
+#ifdef LCD_DEBUG
     uchar i;
+#endif
     uchar idleCounter = 0;
     uchar prevSofCount = 0;
 
@@ -606,7 +608,7 @@ int main(void)
         if(updateNeeded && usbInterruptIsReady()){
             updateNeeded = 0;
             usbSetInterrupt(reportBuffer.bytes, sizeof(reportBuffer));
-#if 0
+#ifdef LCD_DEBUG
             for (i = 0; i < sizeof(reportBuffer); i++)
             {
                 lcd_set_cursor((i % 4)  * 2, i / 4);
