@@ -59,6 +59,9 @@ static uchar expectReport;
 static volatile uchar updateNeeded;
 static enum { KEYCLICK_OFF, KEYCLICK_ON, KEYCLICK_CAPS } keyClickMode;
 
+enum { KEYCLICK_FLAG_RESET = 8, KEYCLICK_FLAG_SAVE = 4 };
+enum { FEATURE_SET_KEYCLICK = 1, FEATURE_OVERRIDE_KEYCODE };
+
 static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol */
 
 static uchar suspended;
@@ -82,7 +85,7 @@ static void hardwareInit(void)
     led(protocolVer == 0);
 
     /* USB Reset by device only required on Watchdog Reset */
-    _delay_ms(11);   /* delay >10ms for USB reset */ 
+    _delay_ms(11);   /* delay >10ms for USB reset */
 
     DDRD &= ~(_BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT));
     /* configure timer 0 for a rate of 12M/(1024 * 256) = 45.78 Hz (~22ms) */
@@ -130,14 +133,11 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
     0x2a, 0x81, 0x00,              //   USAGE_MAXIMUM (Keyboard Application)
     0x81, 0x00,                    //   INPUT (Data,Ary,Abs)
 
-    0x95, 0x01,                    //   REPORT_COUNT (1)
-    0x75, 0x03,                    //   REPORT_SIZE (3)
+    0x95, 0x04,                    //   REPORT_COUNT (3)
+    0x75, 0x08,                    //   REPORT_SIZE (8)
     0xb1, 0x02,                    //   FEATURE (Data,Var,Abs)
-    0x95, 0x01,                    //   REPORT_COUNT (1)
-    0x75, 0x06,                    //   REPORT_SIZE (5)
-    0xb1, 0x03,                    //   FEATURE (Cnst,Var,Abs)
 
-    0xc0,                          // END_COLLECTION  
+    0xc0,                          // END_COLLECTION
 };
 
 static void updateLEDs()
@@ -219,70 +219,6 @@ static void updateKeyClick()
     UDR = c;
 }
 
-static void readEEPROM()
-{
-    char buffer[7];
-    eeprom_read_block(&buffer, 0, sizeof(buffer));
-    if (!strncmp(buffer, "SuNkBd", 6))
-        keyClickMode = buffer[6];
-    else
-        keyClickMode = KEYCLICK_CAPS;
-
-}
-
-static void writeEEPROM()
-{
-    char buffer[7];
-    strcpy(buffer, "SuNkBd");
-    buffer[6] = keyClickMode;
-    eeprom_write_block(&buffer, 0, sizeof(buffer));
-}
-
-
-uchar usbFunctionWrite(uchar *data, uchar len)
-{
-    /* 
-     * HID bits: { NUM LOCK=0, CAPS LOCK=1, SCROLL LOCK=2, COMPOSE=3 }
-     * kbd bits: { NUM LOCK=0, COMPOSE=1, SCROLL LOCK=2, CAPS LOCK=3 }
-     */
-    static uchar HIDModifiers2KeyboardLEDs[] =
-    {
-        0x00, 0x01, 0x08, 0x09,
-        0x04, 0x05, 0x0c, 0x0d,
-        0x02, 0x03, 0x0a, 0x0b,
-        0x06, 0x07, 0x0e, 0x0f,
-    };
-
-    if (len == 1)
-    {
-        switch(expectReport)
-        {
-            case 2:
-                /* Output Report */
-                LEDState = HIDModifiers2KeyboardLEDs[*data & 0x0f];
-                updateLEDs();
-                if(keyClickMode == KEYCLICK_CAPS)
-                    updateKeyClick();
-                break;
-
-            case 3:
-                /* Feature Report */
-                if (*data & 0x08)
-                    /* read from EEPROM */
-                    readEEPROM();
-                else
-                    keyClickMode = *data & 0x03;
-
-                updateKeyClick();
-                if (*data & 0x04)
-                    /* write to EEPROM */
-                    writeEEPROM();
-        }
-    }
-    expectReport=0;
-    return 1;
-}
-
 
 void uart_init()
 {
@@ -330,7 +266,8 @@ enum HIDCodes
     HID_RightControl, HID_RightShift, HID_RightAlt, HID_RightGUI,
 };
 
-const uchar keycode2hidcode[128] PROGMEM =
+/*uchar keycode2hidcode_default[128] PROGMEM =*/
+static uchar keycode2hidcode[128] =
 {
             HID_POSTFail, /* no actual key */
 /* 0x01	*/  HID_Stop,
@@ -465,12 +402,101 @@ const uchar keycode2hidcode[128] PROGMEM =
 static uchar pressedKeys[(sizeof(keycode2hidcode)+7)>>3];
 
 
+static void readEEPROM()
+{
+    uint8_t buffer[8];
+    eeprom_read_block(&buffer, 0, sizeof(buffer));
+    keyClickMode = KEYCLICK_CAPS;
+    if (!strncmp((char*)buffer, "SuNkBd", 6))
+    {
+/*        uint16_t keycode_override;*/
+/*        uint16_t * p;*/
+
+        keyClickMode = buffer[6];
+        buffer[7] = eeprom_read_byte((const uint8_t*)8);
+
+        /* not yet...
+        for (p = (uint16_t*)8; ((keycode_override = eeprom_read_word(p)) & 0xff) != 0xff; p++)
+        {
+            keycode2hidcode[keycode_override & 0x7f] = keycode_override >> 8;
+        }
+        */
+    }
+
+}
+
+static void writeEEPROM()
+{
+    char buffer[7];
+    strcpy(buffer, "SuNkBd");
+    buffer[6] = keyClickMode;
+    eeprom_write_block(&buffer, 0, sizeof(buffer));
+}
+
+
+uchar usbFunctionWrite(uchar *data, uchar len)
+{
+    /*
+     * HID bits: { NUM LOCK=0, CAPS LOCK=1, SCROLL LOCK=2, COMPOSE=3 }
+     * kbd bits: { NUM LOCK=0, COMPOSE=1, SCROLL LOCK=2, CAPS LOCK=3 }
+     */
+    static uchar HIDModifiers2KeyboardLEDs[] =
+    {
+        0x00, 0x01, 0x08, 0x09,
+        0x04, 0x05, 0x0c, 0x0d,
+        0x02, 0x03, 0x0a, 0x0b,
+        0x06, 0x07, 0x0e, 0x0f,
+    };
+
+    switch(expectReport)
+    {
+    case 2:
+        /* Output Report */
+        if (len == 1)
+        {
+            LEDState = HIDModifiers2KeyboardLEDs[*data & 0x0f];
+            updateLEDs();
+            if(keyClickMode == KEYCLICK_CAPS)
+                updateKeyClick();
+        }
+        break;
+
+    case 3:
+        /* Feature Report */
+        if (len == 1 || data[0] == FEATURE_SET_KEYCLICK)
+        {
+            // len==1 legacy report
+
+            if (len > 1)
+                ++data;
+
+            if (*data & KEYCLICK_FLAG_RESET)
+                /* read from EEPROM */
+                readEEPROM();
+            else
+                keyClickMode = *data & 0x03;
+
+            updateKeyClick();
+            if (*data & KEYCLICK_FLAG_SAVE)
+                /* write to EEPROM */
+                writeEEPROM();
+        }
+        else if (len == 4 && data[0] == FEATURE_OVERRIDE_KEYCODE)
+        {
+            keycode2hidcode[data[2]] = data[3];
+        }
+    }
+    expectReport=0;
+    return 1;
+}
+
+
 ISR(USART_RXC_vect)
 {
     uchar i, j, k, idx, mask;
     uchar hid_code;
 
-    static uchar expectResetResponse, expectLayoutResponse;
+    static uchar state = KBD_IDLE_RESPONSE;
 /*    static uchar c;*/
 
     k = UDR;
@@ -480,9 +506,9 @@ ISR(USART_RXC_vect)
 /*    lcd_set_cursor((c % 4)  * 2, c / 4);*/
 /*    lcd_hexbyte(k);*/
 
-    if (expectLayoutResponse)
+    if (state == KBD_LAYOUT_RESPONSE)
     {
-        expectLayoutResponse = 0;
+        state = KBD_IDLE_RESPONSE;
         return;
     }
 
@@ -498,15 +524,14 @@ ISR(USART_RXC_vect)
     switch(k)
     {
         case KBD_RESET_RESPONSE:
-            expectResetResponse = 1;
-            break;
         case KBD_LAYOUT_RESPONSE:
-            expectLayoutResponse = 1;
+            state = k;
             break;
+
         default:
-            if (expectResetResponse)
+            if (state == KBD_RESET_RESPONSE)
             {
-                expectResetResponse = 0;
+                state = KBD_IDLE_RESPONSE;
                 if (k == 4)
                     return; /* no error */
 
@@ -530,7 +555,7 @@ ISR(USART_RXC_vect)
             {
                 if (pressedKeys[i>>3] & _BV(i & 0x07))
                 {
-                    hid_code = pgm_read_byte(keycode2hidcode + i);
+                    hid_code = keycode2hidcode[i];
                     if (hid_code)
                     {
                         if (hid_code < HID_LeftControl)

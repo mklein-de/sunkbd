@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 {
     int r;
     libusb_device_handle * dev;
-    unsigned char buffer[1];
+    unsigned char buffer[4];
 
     libusb_init(NULL);
 
@@ -42,8 +42,9 @@ int main(int argc, char **argv)
 
         printf("received: 0x%02x\n", buffer[0]);
 
-        if (argc > 1)
+        switch(argc)
         {
+        case 2:
             *buffer = atoi(argv[1]);
             printf("sent: 0x%02x\n", buffer[0]);
 
@@ -67,8 +68,24 @@ int main(int argc, char **argv)
             }
 
             printf("received: 0x%02x\n", buffer[0]);
+            break;
 
+        case 3:
+            buffer[0] = 2; /* FEATURE_OVERRIDE_KEYCODE */
+            buffer[1] = 0; /* reserved */
+            buffer[2] = atoi(argv[1]); /* key code */
+            buffer[3] = atoi(argv[2]); /* HID code */
+
+            r = libusb_control_transfer
+                (dev,
+                 LIBUSB_ENDPOINT_OUT|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_DEVICE,
+                 HID_SET_REPORT, (HID_REPORT_TYPE_FEATURE<<8)|REPORT_ID, 0, buffer, 4, 1000);
+            if (r < 0)
+            {
+                fprintf(stderr, "Control Out error %d\n", r);
+            }
         }
+
 
         libusb_close(dev);
     }
