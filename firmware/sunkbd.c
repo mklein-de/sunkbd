@@ -10,7 +10,9 @@
 #include "usbdrv/oddebug.h"
 #include "usbdrv/usbdrv.h"
 
+#ifdef LCD_DEBUG
 #include "lcd.h"
+#endif
 
 #define BAUDRATE 1200L
 
@@ -597,7 +599,9 @@ int main(void)
     usbInit(); /* Initialize USB stack processing */
 
     uart_init();
+#ifdef LCD_DEBUG
     lcd_init();
+#endif
 
     readEEPROM();
 

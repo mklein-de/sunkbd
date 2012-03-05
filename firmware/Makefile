@@ -8,7 +8,8 @@ CFLAGS  = -I. -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ) -MMD
 ASFLAGS = $(CFLAGS)
 
 TARGET  = sunkbd
-SRC_C   = lcd.c usbdrv/oddebug.c usbdrv/usbdrv.c sunkbd.c
+#SRC_C   = lcd.c usbdrv/oddebug.c usbdrv/usbdrv.c sunkbd.c
+SRC_C   = usbdrv/oddebug.c usbdrv/usbdrv.c sunkbd.c
 SRC_ASM = usbdrv/usbdrvasm.S
 
 OBJECTS = $(SRC_C:.c=.o) $(SRC_ASM:.S=.o)
