@@ -3,6 +3,7 @@ OBJCOPY = avr-objcopy
 
 MCU     = atmega8
 FREQ	= 12000000
+#CFLAGS  = -I. -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ) -MMD --save-temps
 CFLAGS  = -I. -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ) -MMD
 ASFLAGS = $(CFLAGS)
 
