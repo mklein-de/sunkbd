@@ -135,7 +135,7 @@ PROGMEM const char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] 
     0x2a, 0x81, 0x00,              //   USAGE_MAXIMUM (Keyboard Application)
     0x81, 0x00,                    //   INPUT (Data,Ary,Abs)
 
-    0x95, 0x04,                    //   REPORT_COUNT (3)
+    0x95, 0x03,                    //   REPORT_COUNT (3)
     0x75, 0x08,                    //   REPORT_SIZE (8)
     0xb1, 0x02,                    //   FEATURE (Data,Var,Abs)
 
