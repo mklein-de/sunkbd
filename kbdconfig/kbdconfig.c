@@ -20,6 +20,20 @@ int main(int argc, char **argv)
     libusb_device_handle * dev;
     unsigned char buffer[4];
 
+    if (argc < 2 || argc > 3)
+    {
+        printf("usage: %s <config>\n"
+               "       %s <key code> <hid code>\n"
+               "\n"
+               "  config: bits 0-1: key click mode:\n"
+               "                     0: off\n"
+               "                     1: on\n"
+               "                     2: caps on\n"
+               "          bit 2: save config to EEPROM\n"
+               "          bit 3: read config from EEPROM\n", argv[0], argv[0]);
+        exit(1);
+    }
+
     libusb_init(NULL);
 
     dev = libusb_open_device_with_vid_pid
