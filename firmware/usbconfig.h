@@ -365,6 +365,6 @@ section at the end of this file).
 #define USB_INTR_ENABLE_BIT     INT1
 /* #define USB_INTR_PENDING        GIFR */
 #define USB_INTR_PENDING_BIT    INTF1
-#define USB_INTR_VECTOR         SIG_INTERRUPT1
+#define USB_INTR_VECTOR         INTR0_vect
 
 #endif /* __usbconfig_h_included__ */
