@@ -43,7 +43,7 @@ static uchar            exitMainloop;
 #endif
 
 
-PROGMEM char usbHidReportDescriptor[33] = {
+PROGMEM const char usbHidReportDescriptor[33] = {
     0x06, 0x00, 0xff,              // USAGE_PAGE (Generic Desktop)
     0x09, 0x01,                    // USAGE (Vendor Usage 1)
     0xa1, 0x01,                    // COLLECTION (Application)
@@ -98,6 +98,8 @@ static void leaveBootloader()
  * because the compiler optimizes a constant 0 to "rcall 0" which is not
  * handled correctly by the assembler.
  */
+
+    TCCR1B = 0;
     nullVector();
 }
 

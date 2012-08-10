@@ -110,9 +110,15 @@ static inline void  bootLoaderInit(void)
 {
     PORTB = 1 << 0; /* activate pull-up for key */
     _delay_us(10);  /* wait for levels to stabilize */
+
+    TCCR1B = 5;      /* prescaler 1/1024 */
 }
 
-#define bootLoaderCondition()   ((PINB & (1 << 0)) == 0)   /* True if jumper is set */
+static inline unsigned char  bootLoaderCondition(void)
+{
+    return bit_is_clear(PINB, PB0) /* bootload jumper */
+        || (bit_is_set(MCUCSR, WDRF) && bit_is_clear(TIFR, TOV1)); /* timer1 overflow flag */
+}
 
 #endif
 

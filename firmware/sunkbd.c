@@ -62,7 +62,7 @@ static volatile uchar updateNeeded;
 static enum { KEYCLICK_OFF, KEYCLICK_ON, KEYCLICK_CAPS } keyClickMode;
 
 enum { KEYCLICK_FLAG_RESET = 8, KEYCLICK_FLAG_SAVE = 4 };
-enum { FEATURE_SET_KEYCLICK = 1, FEATURE_OVERRIDE_KEYCODE };
+enum { FEATURE_SET_KEYCLICK = 1, FEATURE_OVERRIDE_KEYCODE, FEATURE_BOOTLOADER };
 
 static uchar protocolVer=1;      /* 0 is the boot protocol, 1 is report protocol */
 
@@ -482,6 +482,10 @@ uchar usbFunctionWrite(uchar *data, uchar len)
             if (*data & KEYCLICK_FLAG_SAVE)
                 /* write to EEPROM */
                 writeEEPROM();
+        }
+        else if (len > 1 && data[0] == FEATURE_BOOTLOADER)
+        {
+            for(;;); // watchdog reset
         }
         else if (len == 4 && data[0] == FEATURE_OVERRIDE_KEYCODE)
         {
