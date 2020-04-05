@@ -43,6 +43,7 @@ AVRDUDE = avrdude -p $(DEVICE)
 LDFLAGS += -Wl,--section-start=.text=$(BOOTLOADER_ADDRESS)
 
 COMPILE = avr-gcc -Wall -Os -Iusbdrv -I. -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -DDEBUG_LEVEL=0 # -DTEST_MODE
+COMPILE += -D__AVR_LIBC_DEPRECATED_ENABLE__=1
 # NEVER compile the final product with debugging! Any debug output will
 # distort timing so that the specs can't be met.
 
