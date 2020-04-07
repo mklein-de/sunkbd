@@ -82,8 +82,6 @@ static void hardwareInit(void)
     DDRD   = _BV(USB_CFG_DMINUS_BIT) | _BV(USB_CFG_DPLUS_BIT) |
         _BV(DEBUG_LED_BIT);
 
-    PORTB = _BV(PB0); /* enable bootload jumper pullup */
-
     led(protocolVer == 0);
 
     /* USB Reset by device only required on Watchdog Reset */

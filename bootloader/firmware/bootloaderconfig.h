@@ -43,11 +43,14 @@ these macros are defined, the boot loader usees them.
 /* This is the port where the USB bus is connected. When you configure it to
  * "B", the registers PORTB, PINB and DDRB will be used.
  */
-#define USB_CFG_DMINUS_BIT      3
+//#define USB_CFG_DMINUS_BIT      3
+#define USB_CFG_DMINUS_BIT      2
 /* This is the bit number in USB_CFG_IOPORT where the USB D- line is connected.
  * This may be any bit in the port.
  */
-#define USB_CFG_DPLUS_BIT       2
+//#define USB_CFG_DPLUS_BIT       2
+#define USB_CFG_DPLUS_BIT       3
+#define USB_COUNT_SOF           1
 /* This is the bit number in USB_CFG_IOPORT where the USB D+ line is connected.
  * This may be any bit in the port. Please note that D+ must also be connected
  * to interrupt pin INT0! [You can also use other interrupts, see section
@@ -108,16 +111,20 @@ these macros are defined, the boot loader usees them.
 
 static inline void  bootLoaderInit(void)
 {
-    PORTB = 1 << 0; /* activate pull-up for key */
-    _delay_us(10);  /* wait for levels to stabilize */
-
-    TCCR1B = 5;      /* prescaler 1/1024 */
+    TCCR1B = 5; /* prescaler 1/1024 */
+    DDRD |= _BV(7); /* bootloader LED */
 }
 
 static inline unsigned char  bootLoaderCondition(void)
 {
-    return bit_is_clear(PINB, PB0) /* bootload jumper */
+    uint8_t ret = bit_is_clear(PINB, PB0) /* bootload jumper */
         || (bit_is_set(MCUCSR, WDRF) && bit_is_clear(TIFR, TOV1)); /* timer1 overflow flag */
+    if (ret) {
+        PORTD |= _BV(7);
+    } else {
+        PORTD &= ~_BV(7);
+    }
+    return ret;
 }
 
 #endif
